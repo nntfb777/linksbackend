@@ -5,14 +5,7 @@ export default {
     const origin = request.headers.get('Origin') || '';
 
     // 1. CẤU HÌNH CORS ĐỘNG (Đồng bộ với server.js)
-    const allowedOrigins = [
-      'http://localhost:5500',
-      'https://99okcode-admin.pages.dev',
-      'https://99okcode.pages.dev',
-      'https://79kingcode.pages.dev',
-      'https://okkingcode.pages.dev',
-      'https://kl99code.pages.dev'
-    ];
+    const allowedOrigins = ['*'];
 
     const isAllowedOrigin = allowedOrigins.includes(origin);
     const corsHeaders = {
@@ -46,7 +39,7 @@ export default {
 
       // GET /api/config - Lấy cấu hình công khai render thẳng cho Client (Vue App)
       if (url.pathname === '/api/config' && request.method === 'GET') {
-        const { results } = await env.DB.prepare(
+        const { results } = await env.DB99ok.prepare(
           "SELECT category, key_name, value, sort_order FROM site_configs WHERE site_id = ? AND is_active = 1 ORDER BY sort_order ASC"
         ).bind(siteId).all();
 
@@ -72,7 +65,7 @@ export default {
 
       // GET /api/admin/links - Lấy danh sách đầy đủ cho Trang Quản Lý Admin
       if (url.pathname === '/api/admin/links' && request.method === 'GET') {
-        const { results } = await env.DB.prepare(
+        const { results } = await env.DB99ok.prepare(
           "SELECT * FROM site_configs WHERE site_id = ? ORDER BY category, sort_order ASC"
         ).bind(siteId).all();
 
@@ -90,7 +83,7 @@ export default {
           });
         }
 
-        await env.DB.prepare(`
+        await env.DB99ok.prepare(`
           INSERT INTO site_configs (id, site_id, category, key_name, title, value, sort_order, is_active, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
           ON CONFLICT(site_id, key_name) DO UPDATE SET
@@ -124,7 +117,7 @@ export default {
           });
         }
 
-        await env.DB.prepare("DELETE FROM site_configs WHERE site_id = ? AND key_name = ?")
+        await env.DB99ok.prepare("DELETE FROM site_configs WHERE site_id = ? AND key_name = ?")
           .bind(siteId, key_name).run();
 
         return new Response(JSON.stringify({ success: true, message: 'Xóa thành công' }), { headers: corsHeaders });
