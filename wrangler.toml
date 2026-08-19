@@ -1,0 +1,13 @@
+name = "link-image-manager"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+# Kết nối D1 Database
+[[d1_databases]]
+binding = "DB99ok"
+database_name = "99okcsdb"
+database_id = "235f82ff-1ddb-4192-be98-069dbf476ad7"
+
+# Biến môi trường
+[vars]
+ADMIN_SECRET_KEY = "Admin@123!"
