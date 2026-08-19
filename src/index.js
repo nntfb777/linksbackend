@@ -1,13 +1,4 @@
-// src/server.js
-import { Hono } from 'hono';
-import adminLinks from '../../backend/src/routes/adminLinks.js';
 
-const app = new Hono();
-
-// Đăng ký Route API Quản lý Link
-app.route('/api/admin/links', adminLinks);
-
-export default app;
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
