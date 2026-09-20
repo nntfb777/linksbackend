@@ -1,30 +1,53 @@
-
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const origin = request.headers.get('Origin') || '';
 
-    // 1. CẤU HÌNH CORS ĐỘNG (Đồng bộ với server.js)
-    const allowedOrigins = ['*'];
+    // 1. CẤU HÌNH CORS
+    const ADMIN_ORIGINS = [
+      'https://adm.79king.ai',
+      'https://99okcode-admin.pages.dev'
+    ];
 
-    const isAllowedOrigin = allowedOrigins.includes(origin);
-    const corsHeaders = {
-      'Access-Control-Allow-Origin': isAllowedOrigin ? origin : allowedOrigins[0],
+    const isAdminOrigin = ADMIN_ORIGINS.includes(origin);
+
+    const publicCorsHeaders = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, X-Site-ID',
+      'Content-Type': 'application/json'
+    };
+
+    const adminCorsHeaders = {
+      'Access-Control-Allow-Origin': isAdminOrigin ? origin : ADMIN_ORIGINS[0],
       'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Site-ID',
       'Access-Control-Allow-Credentials': 'true',
       'Content-Type': 'application/json'
     };
 
+    const isAdminEndpoint = url.pathname.startsWith('/api/admin');
+    const corsHeaders = isAdminEndpoint ? adminCorsHeaders : publicCorsHeaders;
+
     if (request.method === 'OPTIONS') {
+      if (isAdminEndpoint && !isAdminOrigin) {
+        return new Response(null, { status: 403 });
+      }
       return new Response(null, { headers: corsHeaders });
     }
 
-    // 2. MIDDLEWARE XÁC THỰC BẢO MẬT (Chỉ áp dụng cho các phương thức ghi/xóa POST, DELETE)
-    const authHeader = request.headers.get('Authorization');
-    const expectedSecret = env.ADMIN_SECRET_KEY || "Admin@123!";
+    // 2. MIDDLEWARE XÁC THỰC BẢO MẬT
+    if (isAdminEndpoint && ['POST', 'DELETE'].includes(request.method)) {
+      if (!isAdminOrigin) {
+        return new Response(JSON.stringify({ success: false, error: 'Forbidden: Origin not allowed' }), {
+          status: 403,
+          headers: corsHeaders
+        });
+      }
 
-    if (['POST', 'DELETE'].includes(request.method)) {
+      const authHeader = request.headers.get('Authorization');
+      const expectedSecret = env.ADMIN_SECRET_KEY || "Admin@123!";
+
       if (!authHeader || authHeader !== `Bearer ${expectedSecret}`) {
         return new Response(JSON.stringify({ success: false, error: 'Unauthorized: Access Denied' }), {
           status: 401,
@@ -37,33 +60,38 @@ export default {
     try {
       const siteId = request.headers.get('X-Site-ID') || url.searchParams.get('site_id') || '99ok';
 
-      // GET /api/config - Lấy cấu hình công khai render thẳng cho Client (Vue App)
+      // GET /api/config - Lấy cấu hình công khai (CÓ WORKERS CACHING)
       if (url.pathname === '/api/config' && request.method === 'GET') {
         const { results } = await env.DB99ok.prepare(
           "SELECT category, key_name, value, sort_order FROM site_configs WHERE site_id = ? AND is_active = 1 ORDER BY sort_order ASC"
         ).bind(siteId).all();
 
-        // Bóc tách dữ liệu đúng định dạng cho main-app.js
         const masterUrls = results.filter(r => r.category === 'ping_link').map(r => r.value);
         const banners = results.filter(r => r.category === 'banner_image').map(r => r.value);
         const systemLinks = {};
-        
+        const socialLinks = {};
+
         results.filter(r => r.category === 'system_link').forEach(r => {
           systemLinks[r.key_name] = r.value;
+        });
+
+        results.filter(r => r.category === 'social_link').forEach(r => {
+          socialLinks[r.key_name] = r.value;
         });
 
         return new Response(JSON.stringify({
           success: true,
           site_id: siteId,
-          data: {
-            masterUrls,
-            banners,
-            systemLinks // kefuUrl, apkAppUrl, pcUrl...
+          data: { masterUrls, banners, systemLinks, socialLinks }
+        }), {
+          headers: {
+            ...corsHeaders,
+            'Cache-Control': 'public, max-age=300'  // ← TTL 300 giây = 5 phút
           }
-        }), { headers: corsHeaders });
+        });
       }
 
-      // GET /api/admin/links - Lấy danh sách đầy đủ cho Trang Quản Lý Admin
+      // GET /api/admin/links - Lấy danh sách đầy đủ cho Admin (KHÔNG CACHE)
       if (url.pathname === '/api/admin/links' && request.method === 'GET') {
         const { results } = await env.DB99ok.prepare(
           "SELECT * FROM site_configs WHERE site_id = ? ORDER BY category, sort_order ASC"
@@ -72,7 +100,7 @@ export default {
         return new Response(JSON.stringify({ success: true, site_id: siteId, data: results }), { headers: corsHeaders });
       }
 
-      // POST /api/admin/links - Thêm mới hoặc Cập nhật Link / Banner
+      // POST /api/admin/links - Thêm mới hoặc Cập nhật
       if (url.pathname === '/api/admin/links' && request.method === 'POST') {
         const { category, key_name, title, value, sort_order, is_active } = await request.json();
 
@@ -96,7 +124,7 @@ export default {
         `).bind(
           crypto.randomUUID(),
           siteId,
-          category, // 'ping_link', 'system_link', 'banner_image'
+          category,
           key_name,
           title || '',
           value,

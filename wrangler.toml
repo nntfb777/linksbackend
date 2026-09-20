@@ -11,3 +11,4 @@ database_id = "235f82ff-1ddb-4192-be98-069dbf476ad7"
 # Biến môi trường
 [vars]
 ADMIN_SECRET_KEY = "Admin@123!"
+WORKER_API_URL = "https://linksbackend.nnt79g.workers.dev"
