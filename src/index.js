@@ -6,7 +6,9 @@ export default {
     // 1. CẤU HÌNH CORS
     const ADMIN_ORIGINS = [
       'https://adm.79king.ai',
-      'https://99okcode-admin.pages.dev'
+      'https://api.fb777.center',
+      'https://99okcode-admin.pages.dev',
+      'https://99okcode-backend.nntfb777.workers.dev'
     ];
 
     const isAdminOrigin = ADMIN_ORIGINS.includes(origin);
