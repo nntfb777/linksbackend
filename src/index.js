@@ -15,7 +15,7 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
     const isAdminEndpoint = url.pathname.startsWith('/api/admin');
-    const corsHeaders = isAdminEndpoint ? adminCorsHeaders : publicCorsHeaders;
+  
 
 
     // 2. MIDDLEWARE XÁC THỰC BẢO MẬT
