@@ -3,49 +3,23 @@ export default {
     const url = new URL(request.url);
     const origin = request.headers.get('Origin') || '';
 
-    // 1. CẤU HÌNH CORS
-    const ADMIN_ORIGINS = [
-      'https://adm.79king.ai',
-      'https://api.fb777.center',
-      'https://99okcode-admin.pages.dev',
-      'https://99okcode-backend.nntfb777.workers.dev'
-    ];
 
-    const isAdminOrigin = ADMIN_ORIGINS.includes(origin);
-
-    const publicCorsHeaders = {
+    const corsHeaders = {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, X-Site-ID',
-      'Content-Type': 'application/json'
-    };
-
-    const adminCorsHeaders = {
-      'Access-Control-Allow-Origin': isAdminOrigin ? origin : ADMIN_ORIGINS[0],
       'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Site-ID',
-      'Access-Control-Allow-Credentials': 'true',
       'Content-Type': 'application/json'
     };
 
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { headers: corsHeaders });
+    }
     const isAdminEndpoint = url.pathname.startsWith('/api/admin');
     const corsHeaders = isAdminEndpoint ? adminCorsHeaders : publicCorsHeaders;
 
-    if (request.method === 'OPTIONS') {
-      if (isAdminEndpoint && !isAdminOrigin) {
-        return new Response(null, { status: 403 });
-      }
-      return new Response(null, { headers: corsHeaders });
-    }
 
     // 2. MIDDLEWARE XÁC THỰC BẢO MẬT
     if (isAdminEndpoint && ['POST', 'DELETE'].includes(request.method)) {
-      if (!isAdminOrigin) {
-        return new Response(JSON.stringify({ success: false, error: 'Forbidden: Origin not allowed' }), {
-          status: 403,
-          headers: corsHeaders
-        });
-      }
 
       const authHeader = request.headers.get('Authorization');
       const expectedSecret = env.ADMIN_SECRET_KEY || "Admin@123!";
