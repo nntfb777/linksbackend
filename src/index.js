@@ -78,37 +78,79 @@ export default {
 
       // POST /api/admin/links - Thêm mới hoặc Cập nhật
       if (url.pathname === '/api/admin/links' && request.method === 'POST') {
-        const { category, key_name, title, value, sort_order, is_active } = await request.json();
+        const body = await request.json();
+        
+        // Chuẩn hóa dữ liệu đầu vào: Hỗ trợ mảng items hoặc object đơn lẻ
+        const items = body.items || [{
+          category: body.category,
+          key_name: body.key_name,
+          title: body.title || '',
+          value: body.value,
+          sort_order: body.sort_order || 0,
+          is_active: body.is_active !== undefined ? body.is_active : 1
+        }];
 
-        if (!category || !key_name || !value) {
-          return new Response(JSON.stringify({ success: false, error: 'Thiếu category, key_name hoặc value' }), {
+        if (!items || items.length === 0) {
+          return new Response(JSON.stringify({ success: false, error: 'Thiếu dữ liệu cấu hình để lưu' }), {
             status: 400,
             headers: corsHeaders
           });
         }
 
-        await env.DB99ok.prepare(`
-          INSERT INTO site_configs (id, site_id, category, key_name, title, value, sort_order, is_active, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-          ON CONFLICT(site_id, key_name) DO UPDATE SET
-            category = excluded.category,
-            title = excluded.title,
-            value = excluded.value,
-            sort_order = excluded.sort_order,
-            is_active = excluded.is_active,
-            updated_at = CURRENT_TIMESTAMP
-        `).bind(
-          crypto.randomUUID(),
-          siteId,
-          category,
-          key_name,
-          title || '',
-          value,
-          sort_order || 0,
-          is_active !== undefined ? is_active : 1
-        ).run();
+        // Lấy danh sách cấu hình cũ hiện tại của site để so sánh (tránh ghi đè/log thừa)
+        const { results: existingLinks } = await env.DB99ok.prepare(
+          "SELECT key_name, value FROM site_configs WHERE site_id = ?"
+        ).bind(siteId).all();
 
-        return new Response(JSON.stringify({ success: true, message: 'Cập nhật cấu hình thành công' }), { headers: corsHeaders });
+        const oldMap = new Map(existingLinks.map(i => [i.key_name, i.value]));
+
+        let changedCount = 0;
+        const statements = [];
+
+        for (const item of items) {
+          const { category, key_name, title, value, sort_order, is_active } = item;
+          if (!category || !key_name || value === undefined) continue;
+
+          const oldValue = oldMap.get(key_name);
+
+          // CHỈ TẠO LỆNH GHI KHI: Key chưa tồn tại HOẶC giá trị mới khác hoàn toàn giá trị cũ
+          if (oldValue !== String(value)) {
+            statements.push(
+              env.DB99ok.prepare(`
+                INSERT INTO site_configs (id, site_id, category, key_name, title, value, sort_order, is_active, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(site_id, key_name) DO UPDATE SET
+                  category = excluded.category,
+                  title = excluded.title,
+                  value = excluded.value,
+                  sort_order = excluded.sort_order,
+                  is_active = excluded.is_active,
+                  updated_at = CURRENT_TIMESTAMP
+              `).bind(
+                crypto.randomUUID(),
+                siteId,
+                category,
+                key_name,
+                title || '',
+                value,
+                sort_order || 0,
+                is_active !== undefined ? is_active : 1
+              )
+            );
+            changedCount++;
+          }
+        }
+
+        // Thực thi batch vào D1 nếu có thay đổi thực sự
+        if (statements.length > 0) {
+          await env.DB99ok.batch(statements);
+        }
+
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: changedCount > 0 ? `Đã cập nhật thành công ${changedCount} mục thay đổi!` : 'Không có thay đổi nào mới.',
+          changedCount
+        }), { headers: corsHeaders });
       }
 
       // DELETE /api/admin/links - Xóa một cấu hình
