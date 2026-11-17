@@ -76,11 +76,11 @@ export default {
         return new Response(JSON.stringify({ success: true, site_id: siteId, data: results }), { headers: corsHeaders });
       }
 
-      // POST /api/admin/links - Thêm mới hoặc Cập nhật
+      // POST /api/admin/links -  Cập nhật thông minh (Trả về changedCount để tránh rác log)
       if (url.pathname === '/api/admin/links' && request.method === 'POST') {
         const body = await request.json();
         
-        // Chuẩn hóa dữ liệu đầu vào: Hỗ trợ mảng items hoặc object đơn lẻ
+        // Hỗ trợ nhận cả mảng items hoặc object đơn lẻ
         const items = body.items || [{
           category: body.category,
           key_name: body.key_name,
@@ -97,7 +97,7 @@ export default {
           });
         }
 
-        // Lấy danh sách cấu hình cũ hiện tại của site để so sánh (tránh ghi đè/log thừa)
+        // Lấy danh sách cấu hình cũ hiện tại của site để so sánh
         const { results: existingLinks } = await env.DB99ok.prepare(
           "SELECT key_name, value FROM site_configs WHERE site_id = ?"
         ).bind(siteId).all();
@@ -106,6 +106,7 @@ export default {
 
         let changedCount = 0;
         const statements = [];
+        const changeDetails = [];
 
         for (const item of items) {
           const { category, key_name, title, value, sort_order, is_active } = item;
@@ -113,7 +114,7 @@ export default {
 
           const oldValue = oldMap.get(key_name);
 
-          // CHỈ TẠO LỆNH GHI KHI: Key chưa tồn tại HOẶC giá trị mới khác hoàn toàn giá trị cũ
+          // CHỈ THỰC THI GHI KHI: Key chưa tồn tại HOẶC giá trị mới khác hoàn toàn giá trị cũ
           if (oldValue !== String(value)) {
             statements.push(
               env.DB99ok.prepare(`
@@ -138,6 +139,7 @@ export default {
               )
             );
             changedCount++;
+            changeDetails.push(`[${key_name}]: ${oldValue || '(trống)'} -> ${value}`);
           }
         }
 
@@ -149,9 +151,11 @@ export default {
         return new Response(JSON.stringify({ 
           success: true, 
           message: changedCount > 0 ? `Đã cập nhật thành công ${changedCount} mục thay đổi!` : 'Không có thay đổi nào mới.',
-          changedCount
+          changedCount,
+          changes: changeDetails
         }), { headers: corsHeaders });
       }
+
 
       // DELETE /api/admin/links - Xóa một cấu hình
       if (url.pathname === '/api/admin/links' && request.method === 'DELETE') {
