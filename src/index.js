@@ -157,16 +157,17 @@ export default {
       }
 
 
-      // DELETE /api/admin/links - Xóa một cấu hình
+// DELETE /api/admin/links - Xóa một cấu hình
       if (url.pathname === '/api/admin/links' && request.method === 'DELETE') {
         const key_name = url.searchParams.get('key_name');
         if (!key_name) {
           return new Response(JSON.stringify({ success: false, error: 'Thiếu key_name' }), {
             status: 400,
-            headers: corsHeaders
+            headers: corsHeaders,
           });
         }
 
+        // Thực hiện xóa trực tiếp trong Database D1
         await env.DB99ok.prepare("DELETE FROM site_configs WHERE site_id = ? AND key_name = ?")
           .bind(siteId, key_name).run();
 
@@ -182,7 +183,7 @@ export default {
 
     return new Response(JSON.stringify({ success: false, error: 'Endpoint Not Found' }), {
       status: 404,
-      headers: corsHeaders
+      headers: corsHeaders,
     });
   }
 };
